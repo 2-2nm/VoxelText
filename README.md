@@ -1,7 +1,7 @@
 # VoxelText
 
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![PySide6]((https://img.shields.io/badge/GUI-PySide6-41CD52?style=for-the-badge&logo=qt&logoColor=white)
+![PySide6](https://img.shields.io/badge/GUI-PySide6-41CD52?style=for-the-badge&logo=qt&logoColor=white)
 ![OpenGL](https://img.shields.io/badge/Graphics-ModernGL%20%2F%20OpenGL-555555?style=for-the-badge&logo=opengl&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)
 
