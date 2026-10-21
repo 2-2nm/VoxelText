@@ -9,7 +9,8 @@
 A desktop app that converts photos and video into ASCII art, **rendered on the GPU in real time**. The ASCII grid is drawn by OpenGL fragment shaders (ModernGL), so even a 2000-column video plays back smoothly with synced audio.
 
 <p align="center">
-  <img width="384" height="240" alt="ascii1 gif" src="https://github.com/user-attachments/assets/c2323a11-679e-4681-acfd-4e0b22c97fd6" />
+  <img width="426" height="240" alt="1021" src="https://github.com/user-attachments/assets/b8780dd1-218e-4d0d-ad8b-d804c2e0a963" />
+
 
 </p>
 
