@@ -18,7 +18,7 @@ A desktop app that converts photos and video into ASCII art, **rendered on the G
 ## Screenshots
 
 <p align="center">
-  <img width="1502" height="873" alt="Screenshot (1453)" src="https://github.com/user-attachments/assets/1f578592-8929-46f1-92a6-bbbb50ce8bef" />
+  <img width="49%" height="873" alt="Screenshot (1453)" src="https://github.com/user-attachments/assets/1f578592-8929-46f1-92a6-bbbb50ce8bef" />
 
   <img src="docs/image-mono.png" alt="Image mode, monochrome palette with white transparency" width="49%">
 </p>
