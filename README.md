@@ -1,12 +1,18 @@
 # VoxelText
 
-**Turn images and videos into ASCII art, rendered on the GPU in real time.**
+![Python](https://img.shields.io/badge/PYTHON-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white&labelColor=4a4f57)
+![GUI](https://img.shields.io/badge/GUI-PYSIDE6-41CD52?style=for-the-badge&logo=qt&logoColor=white&labelColor=4a4f57)
+![Renderer](https://img.shields.io/badge/RENDERER-MODERNGL%20%2F%20OPENGL%203.3-5586A4?style=for-the-badge&logo=opengl&logoColor=white&labelColor=4a4f57)
+![Platform](https://img.shields.io/badge/PLATFORM-WINDOWS%2010%20%2F%2011-0078D4?style=for-the-badge&logo=windows&logoColor=white&labelColor=4a4f57)
+![License](https://img.shields.io/badge/LICENSE-MIT-9ACD32?style=for-the-badge&labelColor=4a4f57)
 
-![VoxelText demo](docs/thumbnail.png)
+A desktop app that converts photos and video into ASCII art, **rendered on the GPU in real time**. The ASCII grid is drawn by OpenGL fragment shaders (ModernGL), so even a 2000-column video plays back smoothly with synced audio.
 
-> Demo video: [YOUR VIDEO LINK HERE]
+<p align="center">
+  <img src="docs/thumbnail.png" alt="VoxelText demo" width="720">
+</p>
 
-VoxelText is a desktop app (Python + PySide6) that converts photos and video into text characters. The ASCII grid is drawn by OpenGL fragment shaders (ModernGL), so even a 2000-column video plays back smoothly with synced audio.
+<p align="center"><a href="YOUR_VIDEO_LINK_HERE">Watch the demo video</a></p>
 
 ## Features
 
@@ -30,7 +36,7 @@ VoxelText is a desktop app (Python + PySide6) that converts photos and video int
 
 ## Requirements
 
-- Python 3.10+
+- Windows 10 / 11 and Python 3.10+
 - A GPU with OpenGL 3.3 support
 - Packages: `PySide6`, `moderngl`, `numpy`, `opencv-python`, `Pillow`, `pygame`, `imageio-ffmpeg` (or a system `ffmpeg` on your PATH)
 
