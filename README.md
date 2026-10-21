@@ -13,8 +13,11 @@ A desktop app that converts photos and video into ASCII art, **rendered on the G
 
 </p>
 
-<p align="center"><b>That is not a video, it's text.</b> A game clip rendered at 2000 columns in real time.<br>
-<a href="https://youtu.be/_bCFDKqHmSQ">Watch the demo video</a></p>
+<p align="center"><b>That is not a video, it's text.</b> A game clip rendered at 2000 columns in real time.</p>
+
+<p align="center">
+  <a href="https://youtu.be/_bCFDKqHmSQ"><img src="https://img.shields.io/badge/WATCH-DEMO%20VIDEO-FF0000?style=for-the-badge&logo=youtube&logoColor=white&labelColor=4a4f57" alt="Watch the demo video"></a>
+</p>
 
 ## Screenshots
 
