@@ -9,10 +9,24 @@
 A desktop app that converts photos and video into ASCII art, **rendered on the GPU in real time**. The ASCII grid is drawn by OpenGL fragment shaders (ModernGL), so even a 2000-column video plays back smoothly with synced audio.
 
 <p align="center">
-  <img src="docs/thumbnail.png" alt="VoxelText demo" width="720">
+  <img src="docs/video-mode.png" alt="Video mode: a game rendered as ASCII at 2000 columns" width="820">
 </p>
 
-<p align="center"><a href="YOUR_VIDEO_LINK_HERE">Watch the demo video</a></p>
+<p align="center"><b>That is not a video, it's text.</b> A game clip rendered at 2000 columns in real time.<br>
+<a href="https://youtu.be/_bCFDKqHmSQ">Watch the demo video</a></p>
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/image-red.png" alt="Image mode, red palette" width="49%">
+  <img src="docs/image-mono.png" alt="Image mode, monochrome palette with white transparency" width="49%">
+</p>
+<p align="center"><i>Image mode: palettes and transparency modes (left: Red, right: Monochrome + White transparency)</i></p>
+
+<p align="center">
+  <img src="docs/startup.png" alt="Startup screen" width="820">
+</p>
+<p align="center"><i>Startup screen</i></p>
 
 ## Features
 
