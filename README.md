@@ -9,7 +9,7 @@
 A desktop app that converts photos and video into ASCII art, **rendered on the GPU in real time**. The ASCII grid is drawn by OpenGL fragment shaders (ModernGL), so even a 2000-column video plays back smoothly with synced audio.
 
 <p align="center">
-  <img src="docs/video-mode.png" alt="Video mode: a game rendered as ASCII at 2000 columns" width="820">
+  <img src="<img width="1495" height="867" alt="Screenshot (1456)" src="https://github.com/user-attachments/assets/e2c56609-6651-4696-85eb-7967a2a87fc5" />
 </p>
 
 <p align="center"><b>That is not a video, it's text.</b> A game clip rendered at 2000 columns in real time.<br>
