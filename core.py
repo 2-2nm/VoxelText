@@ -5,10 +5,10 @@ import moderngl
 
 MAX_WORKERS = os.cpu_count() or 8
 ASCII_CHARS_BLACK_BG = ["@", "#", "S", "%", "?", "*", "+", ";", ":", ",", ".", " "]
-#ASCII_CHARS_WHITE_BG = ["-"]
 ASCII_CHARS_WHITE_BG = [" ", ".", ",", ":", ";", "+", "*", "?", "%", "S", "#", "@"]
 ASCII_CHARS_COLOR_BLACK_BG = ["█"]
-#ASCII_CHARS_COLOR_BLACK_BG = [" ", ".", ",", ":", ";", "+", "*", "?", "%", "S", "#", "@"]
+ASCII_CHARS_COLOR_BLOCKY = ["█"]
+ASCII_CHARS_COLOR_PURE = [" ", ".", ",", ":", ";", "+", "*", "?", "%", "S", "#", "@"]
 
 VERTEX_SHADER_PASS1 = """
 #version 330 core
@@ -110,7 +110,7 @@ def generate_glyph_atlas_image(ascii_chars, char_w=7, char_h=12):
         if ch in [" ", ""]:
             continue
         x_offset = i * char_w
-        if ch in ["█", "⬛"]:
+        if ch in ["█"]:
             draw.rectangle([x_offset, 0, x_offset + char_w, char_h], fill=255)
         else:
             try:
@@ -132,10 +132,9 @@ def hex_to_rgb_float(hex_str):
     return tuple(int(hex_str[i:i+2], 16) / 255.0 for i in (0, 2, 4))
 
 
-def render_image_gpu(image_path, target_cols, max_ui_w, max_ui_h, color_mode="Color", palette_hex="#8AA090", transparent_target="white", theme_bg_color="#101217"):
+def render_image_gpu(image_path, target_cols, max_ui_w, max_ui_h, color_mode="Color", fullcolor_style="Blocky", palette_hex="#8AA090", transparent_target="white", theme_bg_color="#101217"):
     img = Image.open(image_path).convert("RGBA")
     orig_w, orig_h = img.size
-    
     char_w, char_h = 7, 12
     font_aspect = char_w / char_h
 
@@ -154,7 +153,11 @@ def render_image_gpu(image_path, target_cols, max_ui_w, max_ui_h, color_mode="Co
     vbo2 = ctx.buffer(verts_pass2.tobytes())
     vao2 = ctx.vertex_array(prog2, [(vbo2, '2f 2f', 'in_vert', 'in_texcoord')])
 
-    ascii_chars = ASCII_CHARS_COLOR_BLACK_BG if color_mode == "Color" else (ASCII_CHARS_BLACK_BG if transparent_target == "white" else ASCII_CHARS_WHITE_BG)
+    if color_mode == "Color":
+        ascii_chars = ASCII_CHARS_COLOR_BLOCKY if str(fullcolor_style).lower() == "blocky" else ASCII_CHARS_COLOR_PURE
+    else:
+        ascii_chars = ASCII_CHARS_BLACK_BG if transparent_target == "white" else ASCII_CHARS_WHITE_BG
+
     atlas_img = generate_glyph_atlas_image(ascii_chars, char_w, char_h)
     num_chars = len(ascii_chars)
 
