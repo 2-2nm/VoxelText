@@ -4,7 +4,6 @@ import sys
 import threading
 import time
 import multiprocessing
-import queue
 import json
 import ctypes
 from PIL import Image
@@ -32,32 +31,32 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFrame, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QLabel, QPushButton, QSlider, QLineEdit, QCheckBox,
-    QTextEdit, QScrollArea, QFileDialog, QMessageBox, QStackedWidget,
-    QSizePolicy, QSplitter
+    QLabel, QPushButton, QSlider, QLineEdit, QCheckBox,
+    QTextEdit, QScrollArea, QFileDialog, QMessageBox, QSplitter
 )
 
 from core import (
     MAX_WORKERS,
-    convert_image_to_ascii_str,
-    convert_image_to_fullcolor,
     get_resource_path,
-    render_gui_preview_to_image,
     render_image_gpu,
     save_ascii_as_image,
 )
-from core_v import convert_video_frame_to_ascii, GPUAsciiVideoPlayer
+from core_v import GPUAsciiVideoPlayer
 from audio_player import AudioPlayer
 
 CONFIG_FILE = "settings.json"
 
 
 class SignalBridge(QObject):
-    log_signal = Signal(str, str)
+    log_signal = Signal(str, str, bool)
     video_frame_signal = Signal(object)
     video_time_signal = Signal(float, float)
+    video_finished_signal = Signal()
     image_render_success_signal = Signal(object, str, str)
     image_render_error_signal = Signal(str)
+    video_export_progress_signal = Signal(int, int, str)
+    video_export_success_signal = Signal(str)
+    video_export_error_signal = Signal(str)
 
 
 class SegmentedButton(QFrame):
@@ -148,8 +147,12 @@ class AsciiArtAppPySide6(QMainWindow):
         self.signals.log_signal.connect(self._on_log_signal)
         self.signals.video_frame_signal.connect(self._on_video_frame)
         self.signals.video_time_signal.connect(self.update_video_time_ui)
+        self.signals.video_finished_signal.connect(self._on_video_finished)
         self.signals.image_render_success_signal.connect(self._on_image_render_success)
         self.signals.image_render_error_signal.connect(self._on_image_render_error)
+        self.signals.video_export_progress_signal.connect(self._on_video_export_progress)
+        self.signals.video_export_success_signal.connect(self._on_video_export_success)
+        self.signals.video_export_error_signal.connect(self._on_video_export_error)
 
         self.THEME_COLORS = {
             "Dark": {
@@ -197,6 +200,7 @@ class AsciiArtAppPySide6(QMainWindow):
         self.current_gui_preview = None
         self.current_pil_img = None
         self.last_converted_basename = ""
+        self.preview_video_path = None
         self.preview_photo_img = None
 
         self.overdrive_mode_val = self.settings.get("photo_overdrive", False)
@@ -207,6 +211,7 @@ class AsciiArtAppPySide6(QMainWindow):
         self.audio_player = AudioPlayer()
         self.active_video_player = None
         self.is_user_seeking = False
+        self._is_last_log_progress = False
 
         self.selected_color_mode = self.settings.get("photo_color_mode", "Green")
         self.selected_video_color_mode = self.settings.get("video_color_mode", "Color")
@@ -300,12 +305,14 @@ class AsciiArtAppPySide6(QMainWindow):
             "deck_mode": "Image",
             "deck_height": 180,
             "photo_color_mode": "Green",
+            "photo_fullcolor_style": "Blocky",
             "photo_width": 85,
             "photo_cutoff": 30,
             "photo_transparency": "white",
             "photo_overdrive": False,
             "photo_overdrive_val": "2000",
             "video_color_mode": "Color",
+            "video_fullcolor_style": "Blocky",
             "video_width": 85,
             "video_transparency": "black",
             "video_overdrive": False,
@@ -332,12 +339,14 @@ class AsciiArtAppPySide6(QMainWindow):
             "deck_mode": self.seg_deck_mode.get(),
             "deck_height": max(140, deck_h),
             "photo_color_mode": self.selected_color_mode,
+            "photo_fullcolor_style": self.seg_fullcolor_style.get(),
             "photo_width": round(self.slider_width.value()),
             "photo_cutoff": round(self.slider_thresh.value()),
             "photo_transparency": self.transparent_target_val,
             "photo_overdrive": self.chk_overdrive.isChecked(),
             "photo_overdrive_val": self.entry_overdrive.text().strip(),
             "video_color_mode": self.selected_video_color_mode,
+            "video_fullcolor_style": self.seg_v_fullcolor_style.get(),
             "video_width": round(self.v_slider_width.value()),
             "video_transparency": self.video_transparent_target_val,
             "video_overdrive": self.chk_v_overdrive.isChecked(),
@@ -440,6 +449,9 @@ class AsciiArtAppPySide6(QMainWindow):
         pt = self.settings.get("photo_transparency", "white").capitalize()
         self.seg_alpha.set(pt)
 
+        p_style = self.settings.get("photo_fullcolor_style", "Blocky")
+        self.seg_fullcolor_style.set(p_style)
+
         self.entry_overdrive.setText(str(self.settings.get("photo_overdrive_val", "2000")))
         self.chk_overdrive.setChecked(self.overdrive_mode_val)
         self.toggle_overdrive()
@@ -450,6 +462,9 @@ class AsciiArtAppPySide6(QMainWindow):
 
         vt = self.settings.get("video_transparency", "black").capitalize()
         self.seg_v_alpha.set(vt)
+
+        v_style = self.settings.get("video_fullcolor_style", "Blocky")
+        self.seg_v_fullcolor_style.set(v_style)
 
         self.entry_v_overdrive.setText(str(self.settings.get("video_overdrive_val", "2500")))
         self.chk_v_overdrive.setChecked(self.video_overdrive_mode_val)
@@ -565,7 +580,7 @@ class AsciiArtAppPySide6(QMainWindow):
             "GPU": gpu,
             "Memory": ram_str,
             "Disk": disk_str,
-            "Terminal": f"VXL Engine v2.0.0 Global ({MAX_WORKERS} Threads)",
+            "Terminal": f"VXL Engine v2.5.0 Global ({MAX_WORKERS} Threads)",
         }
 
     def load_ascii_art_logo(self):
@@ -918,12 +933,28 @@ class AsciiArtAppPySide6(QMainWindow):
             text_unselected=text_primary
         )
 
+        if hasattr(self, 'seg_fullcolor_style'):
+            self.seg_fullcolor_style.set_colors(
+                selected_color=accent,
+                unselected_color=bg_panel,
+                text_selected=btn_load_text,
+                text_unselected=text_primary
+            )
+
         self.seg_v_alpha.set_colors(
             selected_color="#8AA090",
             unselected_color=bg_panel,
             text_selected="#08090C",
             text_unselected=text_primary
         )
+
+        if hasattr(self, 'seg_v_fullcolor_style'):
+            self.seg_v_fullcolor_style.set_colors(
+                selected_color="#8AA090",
+                unselected_color=bg_panel,
+                text_selected="#08090C",
+                text_unselected=text_primary
+            )
 
         if hasattr(self, 'btn_save_photo'):
             self.btn_save_photo.setStyleSheet(f"""
@@ -938,8 +969,36 @@ class AsciiArtAppPySide6(QMainWindow):
                 }}
             """)
 
+        if hasattr(self, 'btn_save_video'):
+            self.btn_save_video.setStyleSheet("""
+                QPushButton {
+                    background-color: #FFFFFF;
+                    color: #08090C;
+                    font-weight: bold;
+                    border-radius: 4px;
+                    padding: 1px 6px;
+                }
+                QPushButton:hover {
+                    background-color: #D5DBE6;
+                    color: #08090C;
+                }
+                QPushButton:disabled {
+                    background-color: #2A2F3A;
+                    color: #8B919E;
+                }
+            """)
+
     def update_transparency_options(self, *args):
-        self.seg_alpha.setEnabled(self.selected_color_mode != "Color")
+        is_color = (self.selected_color_mode == "Color")
+        self.seg_alpha.setEnabled(not is_color)
+        self.seg_fullcolor_style.setEnabled(is_color)
+
+    def _on_photo_style_changed(self, val):
+        if hasattr(self, 'last_image_path') and self.last_image_path and not self.is_video_playing:
+            self.convert_image_process(skip_dialog=True)
+
+    def _on_video_style_changed(self, val):
+        self.append_system_log(f"Video style switched to {val}.", "info")
 
     def select_color_mode(self, value):
         self.selected_color_mode = value
@@ -974,6 +1033,8 @@ class AsciiArtAppPySide6(QMainWindow):
                     }}
                 """)
         self.update_transparency_options()
+        if hasattr(self, 'last_image_path') and self.last_image_path and not self.is_video_playing:
+            self.convert_image_process(skip_dialog=True)
 
     def select_video_color_mode(self, value):
         self.selected_video_color_mode = value
@@ -1007,7 +1068,9 @@ class AsciiArtAppPySide6(QMainWindow):
                         color: #08090C;
                     }}
                 """)
-        self.seg_v_alpha.setEnabled(value != "Color")
+        is_color = (value == "Color")
+        self.seg_v_alpha.setEnabled(not is_color)
+        self.seg_v_fullcolor_style.setEnabled(is_color)
 
     def scroll_text_v(self, amount):
         if self.scroll_preview.isVisible():
@@ -1025,17 +1088,28 @@ class AsciiArtAppPySide6(QMainWindow):
             sb = self.txt_ascii.horizontalScrollBar()
             sb.setValue(sb.value() + amount * 20)
 
-    def append_system_log(self, text, tag="info"):
-        self.signals.log_signal.emit(text, tag)
+    def append_system_log(self, text, tag="info", is_progress=False):
+        self.signals.log_signal.emit(text, tag, is_progress)
 
-    @Slot(str, str)
-    def _on_log_signal(self, text, tag):
+    @Slot(str, str, bool)
+    def _on_log_signal(self, text, tag="info", is_progress=False):
         c = self.colors.get(f"log_{tag}", self.colors["log_info"])
         fmt = QTextCharFormat()
         fmt.setForeground(QColor(c))
         cursor = self.txt_logs.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        cursor.insertText(f"[sys] {time.strftime('%H:%M:%S')}  {text}\n", fmt)
+
+        if self._is_last_log_progress and is_progress:
+            cursor.movePosition(QTextCursor.End)
+            cursor.movePosition(QTextCursor.StartOfLine, QTextCursor.KeepAnchor)
+            cursor.removeSelectedText()
+            cursor.insertText(f"[sys] {time.strftime('%H:%M:%S')}  {text}", fmt)
+        else:
+            cursor.movePosition(QTextCursor.End)
+            if self._is_last_log_progress:
+                cursor.insertText("\n")
+            cursor.insertText(f"[sys] {time.strftime('%H:%M:%S')}  {text}\n", fmt)
+
+        self._is_last_log_progress = is_progress
         self.txt_logs.ensureCursorVisible()
 
     def switch_deck_mode(self, value):
@@ -1324,6 +1398,22 @@ class AsciiArtAppPySide6(QMainWindow):
         c2_layout.setContentsMargins(0, 0, 0, 0)
         c2_layout.setSpacing(2)
 
+        style_row = QWidget()
+        style_layout = QHBoxLayout(style_row)
+        style_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.seg_fullcolor_style = SegmentedButton(
+            ["Blocky", "Pure ASCII"],
+            default="Blocky",
+            selected_color=self.colors["accent"],
+            unselected_color=self.colors["bg_panel"]
+        )
+        self.seg_fullcolor_style.valueChanged.connect(self._on_photo_style_changed)
+        style_layout.addWidget(self.seg_fullcolor_style)
+        style_layout.addStretch()
+
+        c2_layout.addWidget(style_row)
+
         lbl_p2 = QLabel("// PARAMETERS")
         lbl_p2.setFont(QFont("Consolas", 8, QFont.Bold))
         lbl_p2.setStyleSheet(f"color: {self.colors['text_muted']};")
@@ -1397,7 +1487,7 @@ class AsciiArtAppPySide6(QMainWindow):
             selected_color=self.colors["accent"],
             unselected_color=self.colors["bg_panel"]
         )
-        self.seg_alpha.valueChanged.connect(lambda v: setattr(self, "transparent_target_val", v.lower()))
+        self.seg_alpha.valueChanged.connect(self._on_photo_transparency_changed)
         af_layout.addWidget(self.seg_alpha)
 
         c2_layout.addWidget(af)
@@ -1449,10 +1539,40 @@ class AsciiArtAppPySide6(QMainWindow):
         v_c2_layout.setContentsMargins(0, 0, 0, 0)
         v_c2_layout.setSpacing(2)
 
+        v_style_row = QWidget()
+        v_style_layout = QHBoxLayout(v_style_row)
+        v_style_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.seg_v_fullcolor_style = SegmentedButton(
+            ["Blocky", "Pure ASCII"],
+            default="Blocky",
+            selected_color="#8AA090",
+            unselected_color=self.colors["bg_panel"],
+            text_selected="#08090C"
+        )
+        self.seg_v_fullcolor_style.valueChanged.connect(self._on_video_style_changed)
+        v_style_layout.addWidget(self.seg_v_fullcolor_style)
+        v_style_layout.addStretch()
+
+        v_c2_layout.addWidget(v_style_row)
+
+        v_param_header = QWidget()
+        v_ph_layout = QHBoxLayout(v_param_header)
+        v_ph_layout.setContentsMargins(0, 0, 0, 0)
+
         lbl_vp2 = QLabel("// PARAMETERS")
         lbl_vp2.setFont(QFont("Consolas", 8, QFont.Bold))
         lbl_vp2.setStyleSheet(f"color: {self.colors['text_muted']};")
-        v_c2_layout.addWidget(lbl_vp2)
+        v_ph_layout.addWidget(lbl_vp2)
+        v_ph_layout.addStretch()
+
+        self.btn_save_video = QPushButton("Save as MP4")
+        self.btn_save_video.setFont(QFont("Consolas", 8, QFont.Bold))
+        self.btn_save_video.setFixedHeight(20)
+        self.btn_save_video.clicked.connect(self.save_as_video_process)
+        v_ph_layout.addWidget(self.btn_save_video)
+
+        v_c2_layout.addWidget(v_param_header)
 
         vsf1 = QWidget()
         vsf1_layout = QHBoxLayout(vsf1)
@@ -1524,7 +1644,7 @@ class AsciiArtAppPySide6(QMainWindow):
             unselected_color=self.colors["bg_panel"],
             text_selected="#08090C"
         )
-        self.seg_v_alpha.valueChanged.connect(lambda v: setattr(self, "video_transparent_target_val", v.lower()))
+        self.seg_v_alpha.valueChanged.connect(self._on_video_transparency_changed)
         vaf_layout.addWidget(self.seg_v_alpha)
 
         v_c2_layout.addWidget(vaf)
@@ -1595,6 +1715,14 @@ class AsciiArtAppPySide6(QMainWindow):
 
         self.append_system_log(f"Engine initialized. Multi-Core Active ({MAX_WORKERS} Threads).", "info")
 
+    def _on_photo_transparency_changed(self, val):
+        self.transparent_target_val = val.lower()
+        if hasattr(self, 'last_image_path') and self.last_image_path and not self.is_video_playing:
+            self.convert_image_process(skip_dialog=True)
+
+    def _on_video_transparency_changed(self, val):
+        self.video_transparent_target_val = val.lower()
+
     def _on_seek_end(self):
         if self.active_video_player:
             self.active_video_player.seek(self.v_slider_time.value())
@@ -1642,6 +1770,7 @@ class AsciiArtAppPySide6(QMainWindow):
             return
 
         m = self.selected_color_mode
+        p_style = self.seg_fullcolor_style.get()
         cmap = (
             {
                 "Green": "#2F6B4A", "Cyan": "#1F6F86", "Pink": "#A33C4E",
@@ -1667,6 +1796,7 @@ class AsciiArtAppPySide6(QMainWindow):
                     max_ui_w=3840,
                     max_ui_h=2160,
                     color_mode="Color",
+                    fullcolor_style=p_style,
                     palette_hex="#8AA090",
                     transparent_target=self.transparent_target_val,
                     theme_bg_color=self.colors["bg_surface"]
@@ -1703,6 +1833,89 @@ class AsciiArtAppPySide6(QMainWindow):
             self.append_system_log(f"Save PNG error: {e}", "err")
             QMessageBox.critical(self, "Error", f"Failed:\n{e}")
 
+    def save_as_video_process(self):
+        self.stop_video_playback()
+
+        fp = getattr(self, "preview_video_path", None)
+        if not fp or not os.path.exists(fp):
+            fp, _ = QFileDialog.getOpenFileName(
+                self,
+                "Select Source Video for Export",
+                "",
+                "Video Files (*.mp4 *.avi *.mkv *.mov);;All Files (*.*)",
+            )
+            if not fp:
+                self.append_system_log("Video export cancelled: No source video selected.", "warn")
+                return
+
+        dpn = f"{os.path.splitext(os.path.basename(fp))[0]}_ascii.mp4"
+        sp, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save ASCII Video as MP4...",
+            dpn,
+            "MP4 Video (*.mp4);;All Files (*.*)",
+        )
+        if not sp:
+            self.append_system_log("Video export cancelled by user.", "warn")
+            return
+
+        if self.chk_v_overdrive.isChecked():
+            try:
+                tw = int(self.entry_v_overdrive.text().strip())
+                if tw <= 0:
+                    raise ValueError
+            except ValueError:
+                self.append_system_log("Invalid Video Overdrive value! Reverting to slider width.", "err")
+                tw = round(float(self.v_slider_width.value()))
+        else:
+            tw = round(float(self.v_slider_width.value()))
+
+        v_color_mode = self.selected_video_color_mode
+        v_fullcolor_style = self.seg_v_fullcolor_style.get()
+        tt = self.video_transparent_target_val
+
+        self.btn_save_video.setEnabled(False)
+        self.append_system_log(f"Starting MP4 Export Thread... [W: {tw}px, Mode: {v_color_mode}, Style: {v_fullcolor_style}, Alpha: {tt}]", "info")
+
+        def export_thread():
+            try:
+                from video_exporter import export_ascii_video
+                export_ascii_video(
+                    video_path=fp,
+                    output_path=sp,
+                    target_cols=tw,
+                    color_mode=v_color_mode,
+                    fullcolor_style=v_fullcolor_style,
+                    transparent_target=tt,
+                    theme_bg_color=self.colors["bg_surface"],
+                    progress_cb=lambda cur, tot, msg: self.signals.video_export_progress_signal.emit(cur, tot, msg)
+                )
+                self.signals.video_export_success_signal.emit(sp)
+            except Exception as e:
+                self.signals.video_export_error_signal.emit(str(e))
+
+        threading.Thread(target=export_thread, daemon=True).start()
+
+    @Slot(int, int, str)
+    def _on_video_export_progress(self, current_frame, total_frames, msg):
+        pct = int((current_frame / total_frames) * 100) if total_frames > 0 else 0
+        filled = int((pct / 100) * 20)
+        bar = "#" * filled + "-" * (20 - filled)
+        log_text = f"Exporting MP4: [{bar}] {pct}% ({current_frame}/{total_frames})"
+        self.append_system_log(log_text, "info", is_progress=True)
+
+    @Slot(str)
+    def _on_video_export_success(self, sp):
+        self.btn_save_video.setEnabled(True)
+        self.append_system_log(f"Video MP4 Export Completed: {os.path.basename(sp)}", "info")
+        QMessageBox.information(self, "Export Success", f"ASCII Video saved successfully to:\n{sp}")
+
+    @Slot(str)
+    def _on_video_export_error(self, emsg):
+        self.btn_save_video.setEnabled(True)
+        self.append_system_log(f"Video Export Error: {emsg}", "err")
+        QMessageBox.critical(self, "Export Error", f"Failed to export video:\n{emsg}")
+
     def convert_image_process(self, skip_dialog=False):
         self.stop_video_playback()
 
@@ -1734,6 +1947,7 @@ class AsciiArtAppPySide6(QMainWindow):
             sp = getattr(self, 'last_save_path', 'temp_ascii.txt')
 
         m = self.selected_color_mode
+        p_style = self.seg_fullcolor_style.get()
         tt = self.transparent_target_val
 
         if self.chk_overdrive.isChecked():
@@ -1749,7 +1963,7 @@ class AsciiArtAppPySide6(QMainWindow):
 
         tth = round(float(self.slider_thresh.value()))
         self.btn_top_load.setEnabled(False)
-        self.append_system_log(f"Rendering GPU Image ASCII... [W: {tw}px, Cutoff: {tth}%]", "info")
+        self.append_system_log(f"Rendering GPU Image ASCII... [W: {tw}px, Style: {p_style}, Cutoff: {tth}%]", "info")
 
         cmap = (
             {
@@ -1779,6 +1993,7 @@ class AsciiArtAppPySide6(QMainWindow):
                     max_ui_w=max_w,
                     max_ui_h=max_h,
                     color_mode=m,
+                    fullcolor_style=p_style,
                     palette_hex=pal_hex,
                     transparent_target=tt,
                     theme_bg_color=self.colors["bg_surface"]
@@ -1830,6 +2045,27 @@ class AsciiArtAppPySide6(QMainWindow):
         self.lbl_preview_img.setPixmap(pix)
         self.preview_photo_img = pix
 
+    @Slot()
+    def _on_video_finished(self):
+        btn_load_text = "#F7F4EE" if self.current_theme == "Light" else "#08090C"
+        self.btn_top_video.setEnabled(True)
+        self.btn_v_pause.setEnabled(False)
+        self.btn_v_pause.setText("Pause")
+        self.btn_v_pause.setStyleSheet(f"background-color: {self.colors['accent']}; color: {btn_load_text}; font-weight: bold; border-radius: 4px;")
+        self.btn_v_stop.setEnabled(False)
+        self.lbl_v_time.setText("00:00 / 00:00")
+        self.v_slider_time.setValue(0)
+
+        if not self.icon_unmute.isNull():
+            self.btn_mute.setIcon(self.icon_unmute)
+            self.btn_mute.setText("")
+            self.btn_mute.setFixedSize(28, 20)
+        else:
+            self.btn_mute.setIcon(QIcon())
+            self.btn_mute.setText("Mute")
+            self.btn_mute.setFixedSize(50, 20)
+        self.append_system_log("GPU Video playback finished.", "info")
+
     def convert_video_process(self):
         try:
             import cv2, moderngl
@@ -1849,11 +2085,13 @@ class AsciiArtAppPySide6(QMainWindow):
             return
 
         self.stop_video_playback()
+        self.preview_video_path = fp
         self.last_converted_basename = os.path.splitext(os.path.basename(fp))[0]
         self.append_system_log(f"Target video loaded for Internal GPU Offscreen Render: {os.path.basename(fp)}", "info")
 
         tt = self.video_transparent_target_val
         v_color_mode = self.selected_video_color_mode
+        v_fullcolor_style = self.seg_v_fullcolor_style.get()
 
         self.is_video_playing = True
         self.is_video_paused = False
@@ -1895,32 +2133,16 @@ class AsciiArtAppPySide6(QMainWindow):
         self.scroll_preview.show()
 
         def run_gpu_video():
-            def finalize_video():
-                btn_load_text = "#F7F4EE" if self.current_theme == "Light" else "#08090C"
-                self.btn_top_video.setEnabled(True)
-                self.btn_v_pause.setEnabled(False)
-                self.btn_v_pause.setText("Pause")
-                self.btn_v_pause.setStyleSheet(f"background-color: {self.colors['accent']}; color: {btn_load_text}; font-weight: bold; border-radius: 4px;")
-                self.btn_v_stop.setEnabled(False)
-                self.lbl_v_time.setText("00:00 / 00:00")
-                self.v_slider_time.setValue(0)
-
-                if not self.icon_unmute.isNull():
-                    self.btn_mute.setIcon(self.icon_unmute)
-                    self.btn_mute.setText("")
-                    self.btn_mute.setFixedSize(28, 20)
-                else:
-                    self.btn_mute.setIcon(QIcon())
-                    self.btn_mute.setText("Mute")
-                    self.btn_mute.setFixedSize(50, 20)
-                self.append_system_log("GPU Video playback finished.", "info")
-
             try:
                 self.active_video_player = GPUAsciiVideoPlayer(
                     video_path=fp,
                     width_provider_fn=self.get_dynamic_preview_info,
+                    style_provider_fn=lambda: self.seg_v_fullcolor_style.get(),
+                    color_mode_provider_fn=lambda: self.selected_video_color_mode,
+                    transparency_provider_fn=lambda: self.video_transparent_target_val,
                     transparent_target=tt,
                     color_mode=v_color_mode,
+                    fullcolor_style=v_fullcolor_style,
                     theme_bg_color=self.colors["bg_surface"],
                     audio_player=self.audio_player,
                     update_ui_cb=lambda img: self.signals.video_frame_signal.emit(img),
@@ -1938,7 +2160,7 @@ class AsciiArtAppPySide6(QMainWindow):
                 self.active_video_player = None
                 self.is_video_playing = False
                 self.is_video_paused = False
-                QTimer.singleShot(0, finalize_video)
+                self.signals.video_finished_signal.emit()
 
         threading.Thread(target=run_gpu_video, daemon=True).start()
 
