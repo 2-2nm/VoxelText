@@ -29,10 +29,10 @@ class AudioPlayer:
             self.is_initialized = True
         except ImportError:
             self.is_initialized = False
-            self.init_error = "nah"
+            self.init_error = "Pygame library not found"
         except Exception as e:
             self.is_initialized = False
-            self.init_error = f"dunno: {e}"
+            self.init_error = f"Mixer initialization error: {e}"
 
     def set_volume(self, vol):
         self.volume = max(0.0, min(1.0, vol))
@@ -59,7 +59,7 @@ class AudioPlayer:
     def load_audio_from_video(self, video_path):
         self.stop()
         if not self.is_initialized:
-            return False, self.init_error or "tmsc"
+            return False, self.init_error or "Audio player not initialized"
 
         ffmpeg_exe = None
         try:
@@ -70,7 +70,7 @@ class AudioPlayer:
             ffmpeg_exe = shutil.which("ffmpeg")
 
         if not ffmpeg_exe:
-            return False, "you're hacked"
+            return False, "FFmpeg executable not found"
 
         temp_dir = tempfile.gettempdir()
         unique_id = uuid.uuid4().hex[:8]
@@ -98,16 +98,16 @@ class AudioPlayer:
                     pygame.mixer.music.set_volume(0.0)
                 else:
                     pygame.mixer.music.set_volume(self.volume)
-                return True, "gonna cum"
+                return True, "Audio loaded successfully"
             else:
                 self.has_audio = False
-                return False, "This video don't have audio"
+                return False, "This video does not have audio"
         except subprocess.TimeoutExpired:
             self.has_audio = False
-            return False, "cum for me or meh?"
+            return False, "FFmpeg process timed out"
         except Exception as e:
             self.has_audio = False
-            return False, f"Err: {e}"
+            return False, f"Error: {e}"
 
     def play(self, start_sec=0.0):
         if self.has_audio and self.is_initialized:
