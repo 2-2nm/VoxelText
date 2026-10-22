@@ -4,7 +4,10 @@ import cv2
 import moderngl
 from PIL import Image, ImageDraw, ImageFont
 
-from core import ASCII_CHARS_BLACK_BG, ASCII_CHARS_WHITE_BG, ASCII_CHARS_COLOR_BLACK_BG, MAX_WORKERS
+from core import (
+    ASCII_CHARS_BLACK_BG, ASCII_CHARS_WHITE_BG, ASCII_CHARS_COLOR_BLOCKY,
+    ASCII_CHARS_COLOR_PURE, MAX_WORKERS
+)
 
 VERTEX_SHADER_PASS1 = """
 #version 330 core
@@ -132,11 +135,15 @@ def hex_to_rgb_float(hex_str):
 
 
 class GPUAsciiVideoPlayer:
-    def __init__(self, video_path, width_provider_fn, transparent_target="black", color_mode="Color", theme_bg_color="#0F111A", audio_player=None, update_ui_cb=None, update_time_cb=None):
+    def __init__(self, video_path, width_provider_fn, style_provider_fn=None, color_mode_provider_fn=None, transparency_provider_fn=None, transparent_target="black", color_mode="Color", fullcolor_style="Blocky", theme_bg_color="#0F111A", audio_player=None, update_ui_cb=None, update_time_cb=None):
         self.video_path = video_path
         self.width_provider_fn = width_provider_fn
+        self.style_provider_fn = style_provider_fn
+        self.color_mode_provider_fn = color_mode_provider_fn
+        self.transparency_provider_fn = transparency_provider_fn
         self.transparent_target = transparent_target
         self.color_mode = color_mode
+        self.fullcolor_style = fullcolor_style
         self.theme_bg_color = theme_bg_color
         self.audio_player = audio_player
         self.update_ui_cb = update_ui_cb
@@ -173,7 +180,15 @@ class GPUAsciiVideoPlayer:
         vbo2 = ctx.buffer(verts_pass2.tobytes())
         vao2 = ctx.vertex_array(prog2, [(vbo2, '2f 2f', 'in_vert', 'in_texcoord')])
 
-        ascii_chars = ASCII_CHARS_COLOR_BLACK_BG if self.color_mode == "Color" else (ASCII_CHARS_BLACK_BG if self.transparent_target == "white" else ASCII_CHARS_WHITE_BG)
+        current_style = self.style_provider_fn() if self.style_provider_fn else self.fullcolor_style
+        current_color_mode = self.color_mode_provider_fn() if self.color_mode_provider_fn else self.color_mode
+        current_transparency = self.transparency_provider_fn() if self.transparency_provider_fn else self.transparent_target
+
+        if current_color_mode == "Color":
+            ascii_chars = ASCII_CHARS_COLOR_BLOCKY if str(current_style).lower() == "blocky" else ASCII_CHARS_COLOR_PURE
+        else:
+            ascii_chars = ASCII_CHARS_BLACK_BG if current_transparency == "white" else ASCII_CHARS_WHITE_BG
+
         atlas_img = generate_glyph_atlas_image(ascii_chars, self.char_w, self.char_h)
         num_chars = len(ascii_chars)
 
@@ -183,14 +198,14 @@ class GPUAsciiVideoPlayer:
 
         prog1['u_atlas'].value = 1
         prog1['u_num_chars'].value = num_chars
-        prog1['u_color_mode'].value = 1 if self.color_mode == "Color" else 0
+        prog1['u_color_mode'].value = 1 if current_color_mode == "Color" else 0
 
-        if self.transparent_target == "black":
+        if current_transparency == "black":
             prog1['u_bg_color'].value = hex_to_rgb_float(self.theme_bg_color)
-            prog1['u_text_color'].value = (226/255.0, 232/255.0, 240/255.0)
+            prog1['u_text_color'].value = (226 / 255.0, 232 / 255.0, 240 / 255.0)
         else:
-            prog1['u_bg_color'].value = (226/255.0, 232/255.0, 240/255.0)
-            prog1['u_text_color'].value = (15/255.0, 11/255.0, 9/255.0)
+            prog1['u_bg_color'].value = (226 / 255.0, 232 / 255.0, 240 / 255.0)
+            prog1['u_text_color'].value = (15 / 255.0, 11 / 255.0, 9 / 255.0)
 
         current_grid_cols = -1
         current_ui_w, current_ui_h = -1, -1
@@ -220,8 +235,6 @@ class GPUAsciiVideoPlayer:
                 time.sleep(0.03)
                 start_time = time.perf_counter() - (current_frame_idx / fps)
                 continue
-
-            frame_start = time.perf_counter()
 
             if self.audio_player and self.audio_player.has_audio:
                 audio_pos = self.audio_player.get_pos()
@@ -255,6 +268,39 @@ class GPUAsciiVideoPlayer:
                 break
             current_frame_idx += 1
 
+            new_style = self.style_provider_fn() if self.style_provider_fn else self.fullcolor_style
+            new_color_mode = self.color_mode_provider_fn() if self.color_mode_provider_fn else self.color_mode
+            new_transparency = self.transparency_provider_fn() if self.transparency_provider_fn else self.transparent_target
+
+            if new_style != current_style or new_color_mode != current_color_mode or new_transparency != current_transparency:
+                current_style = new_style
+                current_color_mode = new_color_mode
+                current_transparency = new_transparency
+
+                if current_color_mode == "Color":
+                    ascii_chars = ASCII_CHARS_COLOR_BLOCKY if str(current_style).lower() == "blocky" else ASCII_CHARS_COLOR_PURE
+                else:
+                    ascii_chars = ASCII_CHARS_BLACK_BG if current_transparency == "white" else ASCII_CHARS_WHITE_BG
+
+                atlas_img = generate_glyph_atlas_image(ascii_chars, self.char_w, self.char_h)
+                num_chars = len(ascii_chars)
+
+                if atlas_tex:
+                    atlas_tex.release()
+                atlas_tex = ctx.texture((self.char_w * num_chars, self.char_h), 1, atlas_img.tobytes())
+                atlas_tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+                atlas_tex.use(location=1)
+
+                prog1['u_num_chars'].value = num_chars
+                prog1['u_color_mode'].value = 1 if current_color_mode == "Color" else 0
+
+                if current_transparency == "black":
+                    prog1['u_bg_color'].value = hex_to_rgb_float(self.theme_bg_color)
+                    prog1['u_text_color'].value = (226 / 255.0, 232 / 255.0, 240 / 255.0)
+                else:
+                    prog1['u_bg_color'].value = (226 / 255.0, 232 / 255.0, 240 / 255.0)
+                    prog1['u_text_color'].value = (15 / 255.0, 11 / 255.0, 9 / 255.0)
+
             target_cols, max_ui_w, max_ui_h = self.width_provider_fn()
             if target_cols != current_grid_cols or max_ui_w != current_ui_w or max_ui_h != current_ui_h:
                 current_grid_cols = target_cols
@@ -263,7 +309,7 @@ class GPUAsciiVideoPlayer:
                 aspect_factor = (orig_h / orig_w) * font_aspect
                 max_cols_w = max_tex_size // self.char_w
                 max_rows_h = max_tex_size // self.char_h
-                
+
                 max_cols_from_h = int(max_rows_h / aspect_factor) if aspect_factor > 0 else max_cols_w
                 effective_cols = max(10, min(current_grid_cols, max_cols_w, max_cols_from_h))
 
@@ -346,12 +392,12 @@ def convert_video_frame_to_ascii(frame_rgba, new_width=80, transparent_target="w
     gray = cv2.cvtColor(resized, cv2.COLOR_RGBA2GRAY)
 
     if color_mode == "Color":
-        ac = ASCII_CHARS_COLOR_BLACK_BG
+        ascii_chars = ASCII_CHARS_COLOR_BLOCKY
     else:
-        ac = ASCII_CHARS_BLACK_BG if transparent_target == "white" else ASCII_CHARS_WHITE_BG
+        ascii_chars = ASCII_CHARS_BLACK_BG if transparent_target == "white" else ASCII_CHARS_WHITE_BG
 
-    nc = len(ac)
-    anp = np.array(list(ac))
+    nc = len(ascii_chars)
+    anp = np.array(list(ascii_chars))
     idx = np.clip((gray.astype(np.uint16) * nc) // 256, 0, nc - 1)
 
     cm = anp[idx]
