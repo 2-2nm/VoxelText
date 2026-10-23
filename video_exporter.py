@@ -6,10 +6,9 @@ import cv2
 import moderngl
 
 from core import (
-    ASCII_CHARS_BLACK_BG, ASCII_CHARS_WHITE_BG, ASCII_CHARS_COLOR_BLACK_BG,
-    ASCII_CHARS_COLOR_BLOCKY, ASCII_CHARS_COLOR_PURE
+    ASCII_CHARS_BLACK_BG, ASCII_CHARS_WHITE_BG, ASCII_CHARS_COLOR_BLOCKY,
+    VERTEX_SHADER_PASS1, FRAGMENT_SHADER_PASS1, generate_glyph_atlas_image, hex_to_rgb_float
 )
-from core_v import VERTEX_SHADER_PASS1, FRAGMENT_SHADER_PASS1, generate_glyph_atlas_image, hex_to_rgb_float
 
 
 def get_ffmpeg_exe():
@@ -72,30 +71,32 @@ def export_ascii_video(
     vao1 = ctx.vertex_array(prog1, [(vbo1, '2f 2f', 'in_vert', 'in_texcoord')])
 
     if color_mode == "Color":
-        ascii_chars = ASCII_CHARS_COLOR_BLOCKY if str(fullcolor_style).lower() == "blocky" else ASCII_CHARS_COLOR_PURE
+        if str(fullcolor_style).lower() == "blocky":
+            ascii_chars = ASCII_CHARS_COLOR_BLOCKY
+        else:
+            ascii_chars = ASCII_CHARS_WHITE_BG if transparent_target == "white" else ASCII_CHARS_BLACK_BG
     else:
-        ascii_chars = ASCII_CHARS_BLACK_BG if transparent_target == "white" else ASCII_CHARS_WHITE_BG
+        ascii_chars = ASCII_CHARS_WHITE_BG if transparent_target == "white" else ASCII_CHARS_BLACK_BG
 
     atlas_img = generate_glyph_atlas_image(ascii_chars, char_w, char_h)
     num_chars = len(ascii_chars)
 
     atlas_tex = ctx.texture((char_w * num_chars, char_h), 1, atlas_img.tobytes())
     atlas_tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    atlas_tex.repeat_x = False
+    atlas_tex.repeat_y = False
     atlas_tex.use(location=1)
 
     prog1['u_atlas'].value = 1
     prog1['u_num_chars'].value = num_chars
     prog1['u_color_mode'].value = 1 if color_mode == "Color" else 0
-
-    if transparent_target == "black":
-        prog1['u_bg_color'].value = hex_to_rgb_float(theme_bg_color)
-        prog1['u_text_color'].value = (226 / 255.0, 232 / 255.0, 240 / 255.0)
-    else:
-        prog1['u_bg_color'].value = (226 / 255.0, 232 / 255.0, 240 / 255.0)
-        prog1['u_text_color'].value = (15 / 255.0, 11 / 255.0, 9 / 255.0)
+    prog1['u_bg_color'].value = hex_to_rgb_float(theme_bg_color)
+    prog1['u_text_color'].value = (226 / 255.0, 232 / 255.0, 240 / 255.0)
 
     render_tex = ctx.texture((win_w, win_h), 3)
-    render_tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+    render_tex.filter = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
+    render_tex.repeat_x = False
+    render_tex.repeat_y = False
     fbo1 = ctx.framebuffer(color_attachments=[render_tex])
     prog1['u_grid_size'].value = (float(effective_cols), float(grid_rows))
 
@@ -172,6 +173,8 @@ def export_ascii_video(
             fbo1.use()
             ctx.clear(0.0, 0.0, 0.0, 1.0)
             vao1.render(moderngl.TRIANGLE_STRIP)
+
+            render_tex.build_mipmaps()
 
             raw_bytes = fbo1.read(components=3)
 
