@@ -1,12 +1,21 @@
-REM STREAMING_CHUNK:Initializing build environment checks...
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-for %%F in (gui.py core.py core_v.py audio_player.py video_exporter.py) do (
+for /f "delims=" %%A in ('powershell -NoProfile -Command "[char]27"') do set "ESC=%%A"
+set "RED=%ESC%[91m"
+set "GREEN=%ESC%[92m"
+set "RESET=%ESC%[0m"
+
+echo ========================================================
+echo           VoxelText Windows Build Tool
+echo ========================================================
+echo.
+
+for %%F in (main.py gui.py core.py core_v.py audio_player.py video_exporter.py) do (
 if not exist "%%F" (
-echo Missing file: %%F
-echo Put all .py files in the same folder as this .bat.
+echo %RED%[ERROR] Source file not found: %%F%RESET%
+echo %RED%Please place all Python source files in this directory.%RESET%
 goto :fail
 )
 )
@@ -34,19 +43,27 @@ set "PY=python"
 )
 
 if not defined PY (
-echo Python version below 3.14 was not found!
-echo Please install Python 3.13 or 3.12 from https://www.python.org/downloads/
+echo %RED%[ERROR] Python 3.8 - 3.13 was not detected!%RESET%
+echo %RED%Please install Python from https://www.python.org/downloads/%RESET%
 pause
 exit /b 1
 )
 
-REM STREAMING_CHUNK:Installing required Python libraries...
-echo Installing dependencies...
-%PY% -m pip install --upgrade PySide6 Pillow numpy opencv-python moderngl pygame-ce psutil pywinstyles imageio-ffmpeg pyinstaller
-if errorlevel 1 goto :fail
+echo [INFO] Using Python environment: %PY%
+echo.
 
-REM STREAMING_CHUNK:Detecting resource icons and data files...
+echo [INFO] Installing / updating dependencies...
+%PY% -m pip install --upgrade PySide6 Pillow numpy opencv-python moderngl pygame-ce psutil pywinstyles imageio-ffmpeg pyinstaller
+if errorlevel 1 (
+echo %RED%[ERROR] Failed to install Python dependencies.%RESET%
+goto :fail
+)
+
+echo.
+echo [INFO] Detecting icons and assets...
+
 set "DATA_ARGS="
+if exist "data" set "DATA_ARGS=%DATA_ARGS% --add-data data;data"
 if exist "app-icon.ico" set "DATA_ARGS=%DATA_ARGS% --add-data app-icon.ico;."
 if exist "ascii_terminal.txt" set "DATA_ARGS=%DATA_ARGS% --add-data ascii_terminal.txt;."
 if exist "clear_ascii.png" set "DATA_ARGS=%DATA_ARGS% --add-data clear_ascii.png;."
@@ -57,21 +74,49 @@ if exist "unmute.png" set "DATA_ARGS=%DATA_ARGS% --add-data unmute.png;."
 if exist "unmute_l.png" set "DATA_ARGS=%DATA_ARGS% --add-data unmute_l.png;."
 
 set "ICON_ARG="
-if exist "app-icon.ico" set "ICON_ARG=--icon app-icon.ico"
+if exist "data\app-icon.ico" (
+set "ICON_ARG=--icon data\app-icon.ico"
+) else if exist "app-icon.ico" (
+set "ICON_ARG=--icon app-icon.ico"
+)
 
-REM STREAMING_CHUNK:Compiling standalone executable with PyInstaller...
-echo Building dist\VoxelText.exe ...
-%PY% -m PyInstaller --noconfirm --clean --onefile --windowed --name VoxelText %ICON_ARG% %DATA_ARGS% --collect-submodules PySide6 --collect-submodules moderngl --hidden-import pygame.mixer --hidden-import psutil --hidden-import pywinstyles --hidden-import imageio_ffmpeg --hidden-import PIL.Image --hidden-import PIL.ImageDraw --hidden-import PIL.ImageFont --hidden-import cv2 --hidden-import core --hidden-import core_v --hidden-import audio_player --hidden-import video_exporter gui.py
+echo.
+echo [INFO] Compiling VoxelText.exe ...
+%PY% -m PyInstaller --noconfirm --clean --onefile --windowed ^
+--name VoxelText %ICON_ARG% %DATA_ARGS% ^
+--collect-submodules PySide6 ^
+--collect-submodules moderngl ^
+--hidden-import pygame.mixer ^
+--hidden-import psutil ^
+--hidden-import pywinstyles ^
+--hidden-import imageio_ffmpeg ^
+--hidden-import PIL.Image ^
+--hidden-import PIL.ImageDraw ^
+--hidden-import PIL.ImageFont ^
+--hidden-import cv2 ^
+--hidden-import core ^
+--hidden-import core_v ^
+--hidden-import audio_player ^
+--hidden-import video_exporter ^
+--hidden-import gui ^
+main.py
+
 if errorlevel 1 goto :fail
 
 echo.
-echo Built: %cd%\dist\VoxelText.exe
+echo %GREEN%%RESET%
+echo %GREEN%[SUCCESS] Build succeeded!%RESET%
+echo %GREEN%File location: %cd%\dist\VoxelText.exe%RESET%
+echo %GREEN%%RESET%
 echo.
 pause
 exit /b 0
 
 :fail
 echo.
-echo Build failed. See the messages above.
+echo %RED%%RESET%
+echo %RED%[ERROR] Build failed. Please check the error messages above.%RESET%
+echo %RED%%RESET%
+echo.
 pause
 exit /b 1
