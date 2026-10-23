@@ -44,7 +44,18 @@ from core import (
 from core_v import GPUAsciiVideoPlayer
 from audio_player import AudioPlayer
 
-CONFIG_FILE = "settings.json"
+
+def get_config_path():
+    if platform.system() == "Windows":
+        base_dir = os.getenv("APPDATA") or os.path.expanduser("~\\AppData\\Roaming")
+    else:
+        base_dir = os.path.join(os.path.expanduser("~"), ".config")
+    config_dir = os.path.join(base_dir, "VoxelText")
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, "settings.json")
+
+
+CONFIG_FILE = get_config_path()
 
 
 class SignalBridge(QObject):
@@ -295,8 +306,7 @@ class AsciiArtAppPySide6(QMainWindow):
             except ValueError:
                 pass
 
-        char_w = 7
-        cols = max(20, cw // char_w)
+        cols = max(20, round(float(self.v_slider_width.value())))
         return cols, cw, ch
 
     def load_settings(self):
@@ -386,9 +396,6 @@ class AsciiArtAppPySide6(QMainWindow):
         is_light = self.current_theme == "Light"
 
         path_clear = get_resource_path("clear_ascii_l.png" if is_light else "clear_ascii.png")
-        if not os.path.exists(path_clear):
-            path_clear = get_resource_path("clear_ascii.png")
-
         if os.path.exists(path_clear):
             self.btn_clear_ascii.setIcon(QIcon(path_clear))
             self.btn_clear_ascii.setText("")
@@ -399,12 +406,7 @@ class AsciiArtAppPySide6(QMainWindow):
             self.btn_clear_ascii.setFixedSize(50, 20)
 
         path_mute = get_resource_path("mute_l.png" if is_light else "mute.png")
-        if not os.path.exists(path_mute):
-            path_mute = get_resource_path("mute.png")
-
         path_unmute = get_resource_path("unmute_l.png" if is_light else "unmute.png")
-        if not os.path.exists(path_unmute):
-            path_unmute = get_resource_path("unmute.png")
 
         self.icon_mute = QIcon(path_mute) if os.path.exists(path_mute) else QIcon()
         self.icon_unmute = QIcon(path_unmute) if os.path.exists(path_unmute) else QIcon()
@@ -580,14 +582,11 @@ class AsciiArtAppPySide6(QMainWindow):
             "GPU": gpu,
             "Memory": ram_str,
             "Disk": disk_str,
-            "Terminal": f"VXL Engine v2.5.0 Global ({MAX_WORKERS} Threads)",
+            "Terminal": f"VXL Engine v2.6.0 Global ({MAX_WORKERS} Threads)",
         }
 
     def load_ascii_art_logo(self):
-        sd = os.path.dirname(os.path.abspath(__file__))
-        tp = os.path.join(sd, "ascii_terminal.txt")
-        if not os.path.exists(tp):
-            tp = get_resource_path("ascii_terminal.txt")
+        tp = get_resource_path("ascii_terminal.txt")
         if os.path.exists(tp):
             try:
                 with open(tp, "r", encoding="utf-8") as f:
@@ -1098,18 +1097,23 @@ class AsciiArtAppPySide6(QMainWindow):
         fmt.setForeground(QColor(c))
         cursor = self.txt_logs.textCursor()
 
-        if self._is_last_log_progress and is_progress:
-            cursor.movePosition(QTextCursor.End)
-            cursor.movePosition(QTextCursor.StartOfLine, QTextCursor.KeepAnchor)
-            cursor.removeSelectedText()
-            cursor.insertText(f"[sys] {time.strftime('%H:%M:%S')}  {text}", fmt)
+        if is_progress:
+            if self._is_last_log_progress:
+                cursor.movePosition(QTextCursor.End)
+                cursor.movePosition(QTextCursor.StartOfBlock, QTextCursor.KeepAnchor)
+                cursor.removeSelectedText()
+                cursor.insertText(f"[sys] {time.strftime('%H:%M:%S')}  {text}", fmt)
+            else:
+                cursor.movePosition(QTextCursor.End)
+                cursor.insertText(f"[sys] {time.strftime('%H:%M:%S')}  {text}", fmt)
+            self._is_last_log_progress = True
         else:
             cursor.movePosition(QTextCursor.End)
             if self._is_last_log_progress:
                 cursor.insertText("\n")
             cursor.insertText(f"[sys] {time.strftime('%H:%M:%S')}  {text}\n", fmt)
+            self._is_last_log_progress = False
 
-        self._is_last_log_progress = is_progress
         self.txt_logs.ensureCursorVisible()
 
     def switch_deck_mode(self, value):
@@ -1602,7 +1606,7 @@ class AsciiArtAppPySide6(QMainWindow):
         v_c2_layout.addWidget(vsf1)
 
         self.v_slider_width = QSlider(Qt.Horizontal)
-        self.v_slider_width.setRange(30, 200)
+        self.v_slider_width.setRange(30, 500)
         self.v_slider_width.setValue(85)
         self.v_slider_width.valueChanged.connect(lambda v: self.lbl_v_width.setText(f"{v} px"))
         v_c2_layout.addWidget(self.v_slider_width)
