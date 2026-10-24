@@ -10,10 +10,15 @@
 A desktop app that turns photos, videos and **live games** into ASCII art, **rendered on the GPU in real time**. The ASCII grid is drawn by OpenGL fragment shaders (ModernGL), so even a 2000-column video plays back smoothly with synced audio, and a running game can be streamed through the same pipeline while you keep playing it.
 
 <p align="center">
-  <img width="426" height="240" alt="1021" src="https://github.com/user-attachments/assets/b8780dd1-218e-4d0d-ad8b-d804c2e0a963" />
+  <img width="384" height="240" alt="gameascii" src="https://github.com/user-attachments/assets/1fdb07a8-e678-4669-9f34-390653a33382" />
+
+  <img width="384" height="240" alt="gameasciir" src="https://github.com/user-attachments/assets/670942e1-fcd1-467f-9d31-0cb88e66b1ba" />
+
+  <img width="384" height="240" alt="gameascii(1)" src="https://github.com/user-attachments/assets/26ccdddc-cd28-4820-b24e-b28f3a4dfc70" />
+
 </p>
 
-<p align="center"><b>That is not a video, it's text.</b> A game clip rendered at 2000 columns in real time.</p>
+<p align="center"><b>That is not a video, it's text.</b> Minecraft played live through Game Stream.</p>
 
 <p align="center">
   <a href="https://youtu.be/_bCFDKqHmSQ"><img src="https://img.shields.io/badge/WATCH-DEMO%20VIDEO-FF0000?style=for-the-badge&logo=youtube&logoColor=white&labelColor=4a4f57" alt="Watch the demo video"></a>
@@ -114,7 +119,7 @@ python main.py
 Keep the project folder structure as is. Optional assets such as `app-icon.ico` go in the `assets` folder. Then run:
 
 ```bat
-build.bat
+build_windows.bat
 ```
 
 The script installs PyInstaller if needed, bundles the `assets` folder together with the native files of every optional package that is installed, and builds a single windowed executable. The result is saved to `dist\VoxelText.exe`.
@@ -166,7 +171,7 @@ Running `python main.py` with no arguments starts the GUI.
 | `game/capture.py` | Game window capture and frame source |
 | `game/player.py` | GPU game player (live render loop, FPS and performance stats) |
 | `game/manager.py` | Window management: borderless mode, placement, focus, restore |
-| `build.bat` | One-click Windows build script (PyInstaller) |
+| `build_windows.bat` | One-click Windows build script (PyInstaller) |
 | `assets/` | Icons and other bundled resources |
 
 Settings are stored in `%APPDATA%\VoxelText\settings.json`.
