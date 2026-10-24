@@ -108,7 +108,6 @@ void main() {
 """
 
 
-# Font-independent shade blocks (exact, predictable densities).
 _SHADE_PATTERNS = {
     "░": lambda x, y: x % 2 == 0 and y % 2 == 0,
     "▒": lambda x, y: (x + y) % 2 == 0,
@@ -164,10 +163,8 @@ def generate_glyph_atlas_image(ascii_chars, char_w=7, char_h=12):
 
 _RAMP_CANDIDATES = " .'`^\",:;Il!i><~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$"
 
-MAX_GLYPHS = 32  # must match u_glyph_cov[] in the shader
+MAX_GLYPHS = 32  
 
-# name -> ("auto", n) picks n glyphs from the full candidate set with evenly spread density,
-#         or a fixed string of glyphs. Every ramp is re-sorted by *measured* density.
 CHARSETS = {
     "Standard": ("auto", 16),
     "Fine":     ("auto", 32),
@@ -188,7 +185,6 @@ def _coverage_of(chars, char_w=7, char_h=12):
 
 
 def build_density_ramp(n=16, candidates=_RAMP_CANDIDATES):
-    """Pick n glyphs whose measured ink coverage (in the real font) is evenly spread from empty to dense."""
     cands = list(dict.fromkeys(candidates))
     cov = _coverage_of(cands)
     ordered = sorted(cands, key=lambda ch: cov[ch])
@@ -204,7 +200,6 @@ def build_density_ramp(n=16, candidates=_RAMP_CANDIDATES):
 
 
 def get_ramp(name=None):
-    """Glyphs for a charset, sorted light -> dense (for light text on a dark background)."""
     name = name or _active_charset
     if name not in CHARSETS:
         name = "Standard"
@@ -231,7 +226,6 @@ def get_charset():
 
 
 def get_ascii_chars(color_mode, style, transparency):
-    """The glyph list a renderer should use for the current UI state."""
     if color_mode == "Color" and str(style).lower() == "blocky":
         return ASCII_CHARS_COLOR_BLOCKY
     ramp = get_ramp()
@@ -239,7 +233,6 @@ def get_ascii_chars(color_mode, style, transparency):
 
 
 def set_glyph_coverage(prog, atlas_img, num_chars, char_w=7):
-    """Upload per-glyph mean coverage so tiny cells can fall back to a tonal fill."""
     cov = np.zeros(MAX_GLYPHS, dtype="f4")
     for i in range(min(num_chars, MAX_GLYPHS)):
         cov[i] = float(atlas_img[:, i * char_w:(i + 1) * char_w].mean()) / 255.0
