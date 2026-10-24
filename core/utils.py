@@ -1,4 +1,3 @@
-"""Shared helpers: resource lookup, config location, colour conversion."""
 import os
 import sys
 import platform
@@ -12,14 +11,12 @@ def _is_frozen():
 
 
 def project_root():
-    """Folder that holds assets/ - the PyInstaller bundle when frozen, otherwise the source tree."""
     if _is_frozen():
         return getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def get_resource_path(relative_path):
-    """Look in assets/, then the legacy data/ folder, then the root."""
     base = project_root()
     for sub in ("assets", "data", ""):
         candidate = os.path.join(base, sub, relative_path)
@@ -29,7 +26,6 @@ def get_resource_path(relative_path):
 
 
 def get_config_path():
-    """settings.json lives in %APPDATA%/VoxelText (or ~/.config/VoxelText on non-Windows)."""
     if platform.system() == "Windows":
         base_dir = os.getenv("APPDATA") or os.path.expanduser("~\\AppData\\Roaming")
     else:
