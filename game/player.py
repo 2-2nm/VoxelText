@@ -50,7 +50,6 @@ class GPUAsciiGamePlayer:
         return get_ascii_chars(color_mode, style, transparency)
 
     def _color_boost_for(self, style, color_mode):
-        # Blocky = one solid glyph, colour must stay true. Pure ASCII = density carries brightness, colour can be vivid.
         if color_mode == "Color" and str(style).lower() == "blocky":
             return 0.0
         return self.color_boost
@@ -221,8 +220,6 @@ class GPUAsciiGamePlayer:
                     sf = min(max_ui_w / float(win_w), max_ui_h / float(win_h))
                     ui_w = max(1, int(round(win_w * sf)))
                     ui_h = max(1, int(round(win_h * sf)))
-
-                    # Cells smaller than ~3px cannot show glyph shapes anyway: render at most 2x the preview size.
                     if sf < 0.5:
                         win_w = max(ui_w * 2, effective_cols)
                         win_h = max(ui_h * 2, grid_rows)
