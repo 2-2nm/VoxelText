@@ -12,9 +12,9 @@ A desktop app that turns photos, videos and **live games** into ASCII art, **ren
 <p align="center">
   <img width="384" height="240" alt="gameascii" src="https://github.com/user-attachments/assets/1fdb07a8-e678-4669-9f34-390653a33382" />
 
-  <img width="384" height="240" alt="gameasciir" src="https://github.com/user-attachments/assets/670942e1-fcd1-467f-9d31-0cb88e66b1ba" />
-
   <img width="384" height="240" alt="gameascii(1)" src="https://github.com/user-attachments/assets/26ccdddc-cd28-4820-b24e-b28f3a4dfc70" />
+
+  <img width="384" height="240" alt="gameasciir" src="https://github.com/user-attachments/assets/670942e1-fcd1-467f-9d31-0cb88e66b1ba" />
 
 </p>
 
